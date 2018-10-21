@@ -64,6 +64,9 @@ int *idmain;			// the 'main' function
 int basetype; 			// the type of a declaration, make it global for convenience
 int expr_type;			// the type of an expression
 ///////////////////////////////////////////////////////////////////
+
+int index_of_bp;// index of bp pointer on stack
+
 void next(){
 	//token = *src++;
 
@@ -291,8 +294,19 @@ void next(){
 	return;
 }
 
+void match(int tk){
+	if(token == tk){
+		next();
+	} else {
+		printf("%d: expected token: %d\n", line, tk);
+		exit(-1);
+	}
+}
+
 void expression(int level){
-	
+	int *id;
+	int tmp;
+	int *addr;
 	if(!token){
 		printf("%d: unexpected token EOF of expresstion\n", line);
 		exit(-1);
@@ -354,9 +368,9 @@ void expression(int level){
 			match('(');
 			tmp = 0; //number of arguments
 			while(token != ')'){
-				expresstion(Assign);
+				expression(Assign);
 				*++text = PUSH;
-				temp++;
+				tmp++;
 				if(token == ','){
 					match(',');
 				}
@@ -523,14 +537,73 @@ void expression(int level){
 		*++text = (tmp == Inc) ? ADD : SUB;
 		*++text = (expr_type == CHAR) ? SC : SI;
 	}
-}
-
-void match(int tk){
-	if(token == tk){
-		next();
-	} else {
-		printf("%d: expected token: %d\n", line, tk);
+	else{
+		printf("%d: bad expression\n", line);
 		exit(-1);
+	}
+	
+	// binary operator and postfix operations.
+	while(token >= level){
+		//handle according to current operator's precedence
+		tmp = expr_type;
+		if(token = Assign){
+			// var = expr;
+			match(Assign);
+			if(*text == LC || *text == LI){
+				*text = PUSH; //save the lvalue's pointer
+			} else {
+				printf("%d: bad lvalue in assignment\n", line);
+				exit(-1);
+			}
+			expression(Assign);
+
+			expr_type = tmp;
+			*++text = (expr_type == CHAR) ? SC : SI;
+		}
+		else if (token == Cond){
+			// expr ? a : b;
+			match(Cond);
+			*++text = JZ;
+			addr = ++text;
+			expression(Assign);
+			if(token == ':'){
+				match(':');
+			} else {
+				printf("%d: missing colon in conditional\n", line);
+				exit(-1);
+			}
+			*addr = (int)(text + 3);
+			*++text = JMP;
+			addr = ++text;
+			expression(Cond);
+			*addr = (int)(text + 1);
+		}
+		else if (token = Lor){
+			// logic or
+			match(Lor);
+			*++text = JNZ;
+			addr = ++text;
+			expression(Lan);
+			*addr = (int)(text + 1);
+			expr_type = INT;
+		}
+		else if (token == Lan){
+			//logic and
+			match(Lan):
+			*++text = JZ;
+			expression(Or);
+			addr = (int)(text + 1);
+			expr_type = INT;
+		}
+		else if (token == Or){
+			//bitwise or
+			match(Or);
+			*++text = PUSH;
+			expression(Xor);
+			*++text = OR;
+			expr_type = INT;
+		}
+//////////.................................///////////////
 	}
 }
 
@@ -602,7 +675,6 @@ void statement(){
 	}
 }
 
-int index_of_bp;// index of bp pointer on stack
 void function_parameter(){
 	int type;
 	int params;
